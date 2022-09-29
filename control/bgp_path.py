@@ -5,7 +5,12 @@ import sys
 
 _TIMEOUT_SECONDS = 1000
 
-def add_path(add_as=1, prefix='', prefix_len=0, vrf_id=0):
+def add_path(add_as=1, prefix='', prefix_len=0, hop='', vrf_id=0):
+    add_as = int(add_as)
+    prefix = str(prefix)
+    prefix_len = int(prefix_len)
+    hop = str(hop)
+    vrf_id = int(vrf_id)
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
         nlri = Any()
@@ -26,7 +31,11 @@ def add_path(add_as=1, prefix='', prefix_len=0, vrf_id=0):
         as_path.Pack(attribute_pb2.AsPathAttribute(
             segments=[as_segment],
         ))
-        attributes = [origin, as_path]
+        next_hop = Any()
+        next_hop.Pack(attribute_pb2.NextHopAttribute(
+            next_hop=hop,
+        ))
+        attributes = [origin, as_path, next_hop]
 
         if not vrf_id:
             stub.AddPath(
