@@ -5,7 +5,7 @@ from bgp_vrf import *
 import sys
 import bgp_control as this
 
-def find_peer():
+def find_peer(none):
     auto_discover_peer()
 
 def add_del_path(bgp_as, prefix, prefix_len, hop, is_add):
