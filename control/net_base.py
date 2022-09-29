@@ -35,12 +35,12 @@ def get_physical_netcard():
     )
     return physical_netcard_up, physical_netcard_down, physical_netcard_all
 
-def get_net_card(ifname):
+def get_net(ifname):
     net_card_info = []
     all_ip = []
     info = psutil.net_if_addrs()
     for k, v in info.items():
-        if not k == ifname:
+        if not k in ifname:
             continue
         for item in v:
             if item[0] == 2 and not item[1] == '127.0.0.1':

@@ -1,4 +1,7 @@
-from grpc import all
+from api import *
+from google.protobuf.any_pb2 import Any
+
+_TIMEOUT_SECONDS = 1000
 
 def add_path(stub, add_as=1, prefix='', prefix_len=0, hop=''):
     nlri = Any()

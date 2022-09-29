@@ -1,22 +1,13 @@
 #!/usr/bin/env python
-from __future__ import absolute_import
-from __future__ import print_function
-from google.protobuf.any_pb2 import Any
-from bgp_grpc import *
+from api import *
 from net_base import *
 
 import grpc
-import psutil
-import struct
 import socket
 import sys
-import os
 import queue
 import time
 import threading
-
-
-
 
 _TIMEOUT_SECONDS = 1000
 
@@ -109,13 +100,10 @@ def add_peer(active_bgp, local_ip):
             _TIMEOUT_SECONDS,
         )
 
-
-if __name__ == '__main__':
-    all_net, local_ip = get_net_card(sys.argv[1])
-    time1 = time.time()
+def auto_discover_peer():
+    all_net_card, _, _ = get_physical_netcard
+    all_net, local_ip = get_net(all_net_card)
     run_scan_host(all_net)
     while (not build_all_task) or (scan_done < scan_task):
         time.sleep(1)
-    time2 = time.time()
-    print('done', time2-time1)
     add_peer(active_bgp, local_ip)
