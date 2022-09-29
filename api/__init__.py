@@ -1,0 +1,1 @@
+__all__ = ['attribute_pb2_grpc', 'attribute_pb2', 'capability_pb2_grpc', 'capability_pb2', 'gobgp_pb2_grpc', 'gobgp_pb2']

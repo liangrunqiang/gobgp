@@ -1,3 +1,8 @@
+import psutil
+import os
+import struct
+import socket
+
 ###
 #exp:
 #mask_str:255.255.255.0

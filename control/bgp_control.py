@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 from __future__ import absolute_import
 from __future__ import print_function
-
 import grpc
 from google.protobuf.any_pb2 import Any
+from bgp_grpc import *
 
-import gobgp_pb2
-import gobgp_pb2_grpc
-import attribute_pb2
 import psutil
 import struct
 import socket
@@ -17,9 +14,9 @@ import queue
 import time
 import threading
 
-import lib/net_base
-import lib/bgp_path
-import lib/bgp_vrf
+from bgp_path import *
+from bgp_path import *
+from bgp_vrf import *
 
 
 

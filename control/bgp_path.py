@@ -1,3 +1,5 @@
+from grpc import all
+
 def add_path(stub, add_as=1, prefix='', prefix_len=0, hop=''):
     nlri = Any()
     nlri.Pack(attribute_pb2.IPAddressPrefix(
