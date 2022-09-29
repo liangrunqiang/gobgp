@@ -8,9 +8,9 @@ import bgp_control as this
 def find_peer(none):
     auto_discover_peer()
 
-def add_del_path(bgp_as, prefix, prefix_len, hop, is_add):
+def add_del_path(bgp_as, prefix, prefix_len, vrf_id, is_add):
     if is_add:
-        add_path(bgp_as, prefix, prefix_len, hop)
+        add_path(bgp_as, prefix, prefix_len, vrf_id)
 
 if __name__ == '__main__':
     if hasattr(this, sys.argv[1]):
