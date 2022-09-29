@@ -3,7 +3,7 @@ from bgp_peer import *
 from bgp_path import *
 from bgp_vrf import *
 import sys
-import main as this
+import bgp_control as this
 
 def find_peer():
     auto_discover_peer()
