@@ -2,16 +2,19 @@
 from bgp_peer import *
 from bgp_path import *
 from bgp_vrf import *
-import threading
-import time
-
-is_running = 0
+import sys
+import main as this
 
 def find_peer():
-    while is_running:
-        auto_discover_peer()
-        time.sleep(30)
+    auto_discover_peer()
+
+def add_del_path(bgp_as, prefix, prefix_len, hop, is_add):
+    if is_add:
+        add_path(bgp_as, prefix, prefix_len, hop)
 
 if __name__ == '__main__':
-    t = threading.Thread(target=find_peer, arg=())
-    t.start()
+    if hasattr(this, sys.argv[1]):
+        getattr(this, sys.argv[1])(sys.argv[2:])
+    else:
+        print('Usage:')
+
