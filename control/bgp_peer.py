@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+import sys
+sys.path.append('..')
 from api import *
 from net_base import *
 

@@ -5,8 +5,6 @@ from bgp_vrf import *
 import sys
 import main as this
 
-sys.path.append('..')
-
 def find_peer():
     auto_discover_peer()
 
