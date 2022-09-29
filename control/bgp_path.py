@@ -1,6 +1,9 @@
 from api import *
 from google.protobuf.any_pb2 import Any
 import grpc
+import sys
+
+sys.path.append('..')
 
 _TIMEOUT_SECONDS = 1000
 
