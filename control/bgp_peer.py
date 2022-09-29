@@ -1,27 +1,13 @@
 #!/usr/bin/env python
-from __future__ import absolute_import
-from __future__ import print_function
+from api import *
+from net_base import *
 
 import grpc
-from google.protobuf.any_pb2 import Any
-
-import gobgp_pb2
-import gobgp_pb2_grpc
-import attribute_pb2
-import psutil
-import struct
 import socket
 import sys
-import os
 import queue
 import time
 import threading
-
-import lib/net_base
-import lib/bgp_path
-import lib/bgp_vrf
-
-
 
 _TIMEOUT_SECONDS = 1000
 
@@ -76,51 +62,48 @@ def run_scan_host(all_ip):
     build_all_task = 1
 
 def add_peer(active_bgp, local_ip):
-    channel = grpc.insecure_channel('localhost:50051')
-    stub = gobgp_pb2_grpc.GobgpApiStub(channel)
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub = gobgp_pb2_grpc.GobgpApiStub(channel)
 
-    peers = stub.ListPeer(
-        gobgp_pb2.ListPeerRequest(
-        ),
-        _TIMEOUT_SECONDS,
-    )
-
-    exists_peer = []
-    for peer in peers:
-        peer_info = getattr(peer, 'peer')
-        peer_conf = getattr(peer_info, 'conf')
-        exists_peer.append(getattr(peer_conf, 'neighbor_address'))
-
-    while 1:
-        if active_bgp.empty():
-            break
-        nei_addr = active_bgp.get()
-        if nei_addr in local_ip:
-            print(nei_addr, 'is local addr')
-            continue
-        if nei_addr in exists_peer:
-            print(nei_addr, 'is already in peers')
-            continue
-        print('add peer:', nei_addr)
-        stub.AddPeer(
-            gobgp_pb2.AddPeerRequest(
-                peer=gobgp_pb2.Peer(
-                    conf=gobgp_pb2.PeerConf(
-                        neighbor_address=nei_addr,
-                        peer_asn=1
-                    )
-                )
+        peers = stub.ListPeer(
+            gobgp_pb2.ListPeerRequest(
             ),
             _TIMEOUT_SECONDS,
         )
 
+        exists_peer = []
+        for peer in peers:
+            peer_info = getattr(peer, 'peer')
+            peer_conf = getattr(peer_info, 'conf')
+            exists_peer.append(getattr(peer_conf, 'neighbor_address'))
 
-if __name__ == '__main__':
-    all_net, local_ip = get_net_card(sys.argv[1])
-    time1 = time.time()
+        while 1:
+            if active_bgp.empty():
+                break
+            nei_addr = active_bgp.get()
+            if nei_addr in local_ip:
+                print(nei_addr, 'is local addr')
+                continue
+            if nei_addr in exists_peer:
+                print(nei_addr, 'is already in peers')
+                continue
+            print('add peer:', nei_addr)
+            stub.AddPeer(
+                gobgp_pb2.AddPeerRequest(
+                    peer=gobgp_pb2.Peer(
+                        conf=gobgp_pb2.PeerConf(
+                            neighbor_address=nei_addr,
+                            peer_asn=1
+                        )
+                    )
+                ),
+                _TIMEOUT_SECONDS,
+            )
+
+def auto_discover_peer():
+    all_net_card, _, _ = get_physical_netcard()
+    all_net, local_ip = get_net(all_net_card)
     run_scan_host(all_net)
     while (not build_all_task) or (scan_done < scan_task):
         time.sleep(1)
-    time2 = time.time()
-    print('done', time2-time1)
     add_peer(active_bgp, local_ip)
