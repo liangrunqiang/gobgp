@@ -101,7 +101,7 @@ def add_peer(active_bgp, local_ip):
             )
 
 def auto_discover_peer():
-    all_net_card, _, _ = get_physical_netcard
+    all_net_card, _, _ = get_physical_netcard()
     all_net, local_ip = get_net(all_net_card)
     run_scan_host(all_net)
     while (not build_all_task) or (scan_done < scan_task):
