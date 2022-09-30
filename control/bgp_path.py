@@ -6,12 +6,6 @@ import sys
 _TIMEOUT_SECONDS = 1000
 
 def add_path(add_as=1, vrf_id=0, prefix='', prefix_len=0, hop=''):
-    add_as = int(add_as)
-    vrf_id = int(vrf_id)
-    prefix = str(prefix)
-    prefix_len = int(prefix_len)
-    hop = str(hop)
-    
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
         nlri = Any()

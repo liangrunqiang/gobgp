@@ -4,8 +4,6 @@ import grpc
 _TIMEOUT_SECONDS = 1000
 
 def add_vrf(add_as=1, vrf=0):
-    add_as = int(add_as)
-    vrf = int(vrf)
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
         stub.AddVrf(
@@ -17,3 +15,12 @@ def add_vrf(add_as=1, vrf=0):
             _TIMEOUT_SECONDS,
         )
 
+def list_vrf(name):
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub = gobgp_pb2_grpc.GobgpApiStub(channel)
+        ret = stub.ListVrf(
+            gobgp_pb2.ListVrfRequest(
+                name=name
+            )
+        )
+        return ret
