@@ -2,66 +2,127 @@
 from bgp_peer import *
 from bgp_path import *
 from bgp_vrf import *
-import sys
+import sys, argparse
 import bgp_control as this
 
-def usage(func):
-    print('usage:')
-    print('\t python %s' % func)
-    print('\t args:')
+def is_int(a):
+    if isinstance(a, int):
+        return a
+    if not a.isdigit():
+        raise Exception('%s is not interger' % a)
+    return int(a)
+def is_str(a):
+    if not isinstance(a, str):
+        raise Exception('%s is not string' % a)
+    return str(a)
+
+def make_arg_current(arg_type, argv):
+    for i in arg_type:
+        argv[i] = getattr(this, "is_"+str(arg_type[i][1]))(argv[i])
+    return argv
+
+"""@fun_gen(name='str', rd='str', id='int')""" 
+func_arg_require = {}
+def fun_gen(**a1):
+    global func_arg_require
+    def func_deco(func):
+        func_arg_require[func.__name__] = a1
+        def wrapper(**argv):
+            print('args1:', argv)
+            argv = make_arg_current(a1, argv)
+            print('args2:', argv)
+            func(**argv)
+        return wrapper
+    return func_deco
 
 
-def find_peer_usage():
-    print('args:none')
-def find_peer(**args):
+@fun_gen()
+def find_peer(**argv):
     auto_discover_peer()
 
 
-def add_del_path_usage():
-    print('\t\t bgp_as : int')
-    print('\t\t vrf_id : int')
-    print('\t\t prefix : str')
-    print('\t\t prefix_len : int')
-    print('\t\t prefix_len : str')
-    print('\t\t is_add : int')
-def add_del_path(bgp_as, vrf_id, prefix, prefix_len, hop, is_add):
-    bgp_as = int(bgp_as)
-    vrf_id = int(vrf_id)
-    prefix = str(prefix)
-    prefix_len = int(prefix_len)
-    hop = str(hop)
-    is_add = int(is_add)
-    if is_add:
-        add_path(bgp_as, vrf_id, prefix, prefix_len, hop)
+@fun_gen()
+def show_peer(**argv):
+    list_peer_internal()
+
+ 
+@fun_gen(
+    bgp_as=[0,'int'], 
+    vrf_name=['','str'], 
+    prefix=['','str'], 
+    prefix_len=[0,'int'], 
+    hop=['0.0.0.0','str'],
+    mac=['','str'],
+    vni=['','str'],
+    path_type=['ipv4','str']
+)
+def add_path(**argv):
+    add_path_internal(**argv)
 
 
-def show_vrf_usage():
-    print('\t\t name : str')
-def show_vrf(name):
-    name = str(name)
-    ret = list_vrf(name)
-    print(ret)
+@fun_gen(
+    bgp_as=[0,'int'], 
+    vrf_name=['','str'], 
+    prefix=['','str'], 
+    prefix_len=[0,'int'], 
+    hop=['0.0.0.0','str'],
+    mac=['','str'],
+    vni=['','str'],
+    path_type=['ipv4','str']
+)
+def del_path(**argv):
+    del_path_internal(**argv)
 
 
-def add_del_vrf_usage():
-    print('\t\t name : str')
-    print('\t\t rd : str')
-    print('\t\t import_rt : str')
-    print('\t\t export_rt : str')
-    
+@fun_gen(vrf_name=['','str'], path_type=['','str'])
+def show_path(**argv):
+    list_path_internal(**argv)
 
+
+@fun_gen(name=['','str'])
+def show_vrf(**argv):
+    list_vrf_internal(**argv)
+
+
+@fun_gen(
+    name=['','str'], 
+    rd=['','str'], 
+    import_rt=['','str'], 
+    export_rt=['','str'], 
+    id=[0,'int'])
+def add_vrf(**argv):
+    add_vrf_internal(**argv)
+
+
+@fun_gen(name=['','str'])
+def del_vrf(**argv):
+    del_vrf_internal(**argv)
+
+
+@fun_gen()
+def watch(**argv):
+    watch_internal()
 
 
 if __name__ == '__main__':
-    if hasattr(this, sys.argv[1]):
-        if sys.argv[2] == 'help':
-            usage(sys.argv[1])
-            getattr(this, sys.argv[1]+'_usage')()
-            exit()
-        try:
-            getattr(this, sys.argv[1])(*(sys.argv[2:]))
-        except:
-            usage(sys.argv[1])
-            getattr(this, sys.argv[1]+'_usage')()
-
+    if len(sys.argv) > 1 and hasattr(this, sys.argv[1]):
+        opera = sys.argv[1]
+        del sys.argv[1]
+        parser = argparse.ArgumentParser(description="")
+        args = func_arg_require[opera]
+        for opt in args:
+            parser.add_argument("--"+str(opt), help="", default=args[opt][0])
+        args_val = parser.parse_args()
+        args_build = {}
+        for opt in args:
+            args_build[opt] = getattr(args_val, opt)
+        getattr(this, opera)(**args_build)
+    else:
+        if len(sys.argv) > 1:
+            print('unknow opera : %s' % sys.argv[1])
+        else:
+            print('miss opera')
+        print('vaild opera:')
+        for opt in func_arg_require:
+            print('\t\t %s ' % opt)
 

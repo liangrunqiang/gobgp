@@ -61,22 +61,32 @@ def run_scan_host(all_ip):
                         create_task = 1
     build_all_task = 1
 
-def add_peer(active_bgp, local_ip):
+def list_peer_info(stub):
+    peers = stub.ListPeer(
+        gobgp_pb2.ListPeerRequest(
+        ),
+        _TIMEOUT_SECONDS,
+    )
+
+    exists_peer = []
+    for peer in peers:
+        print(peer)
+        peer_info = getattr(peer, 'peer')
+        peer_conf = getattr(peer_info, 'conf')
+        exists_peer.append(getattr(peer_conf, 'neighbor_address'))
+    print(exists_peer)
+    return exists_peer
+
+def list_peer_internal():
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
+        list_peer_info(stub)
 
-        peers = stub.ListPeer(
-            gobgp_pb2.ListPeerRequest(
-            ),
-            _TIMEOUT_SECONDS,
-        )
-
-        exists_peer = []
-        for peer in peers:
-            peer_info = getattr(peer, 'peer')
-            peer_conf = getattr(peer_info, 'conf')
-            exists_peer.append(getattr(peer_conf, 'neighbor_address'))
-
+def add_peer_internal(active_bgp, local_ip, afi_safis):
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub = gobgp_pb2_grpc.GobgpApiStub(channel)
+        
+        exists_peer = list_peer_info(stub)
         while 1:
             if active_bgp.empty():
                 break
@@ -94,11 +104,78 @@ def add_peer(active_bgp, local_ip):
                         conf=gobgp_pb2.PeerConf(
                             neighbor_address=nei_addr,
                             peer_asn=1
-                        )
+                        ),
+                        afi_safis=afi_safis
                     )
                 ),
                 _TIMEOUT_SECONDS,
             )
+
+def add_normal_peer(active_bgp, local_ip):
+    add_peer_internal(active_bgp, local_ip, [])
+
+def add_l3vpn_peer(active_bgp, local_ip):
+    afi_safis = []
+    afi_safis.append(
+        gobgp_pb2.AfiSafi(
+            config=gobgp_pb2.AfiSafiConfig(
+                family=gobgp_pb2.Family(
+                    afi=gobgp_pb2.Family.AFI_IP,
+                    safi=gobgp_pb2.Family.SAFI_MPLS_VPN
+                ),
+                enabled=True
+            )
+        )
+    )
+    afi_safis.append(
+        gobgp_pb2.AfiSafi(
+            config=gobgp_pb2.AfiSafiConfig(
+                family=gobgp_pb2.Family(
+                    afi=gobgp_pb2.Family.AFI_IP,
+                    safi=gobgp_pb2.Family.SAFI_ROUTE_TARGET_CONSTRAINTS
+                ),
+                enabled=True
+            )
+        )
+    )
+    add_peer_internal(active_bgp, local_ip, afi_safis)
+
+def add_l2vpn_evpn_peer(active_bgp, local_ip):
+    afi_safis = []
+    afi_safis.append(
+        gobgp_pb2.AfiSafi(
+            config=gobgp_pb2.AfiSafiConfig(
+                family=gobgp_pb2.Family(
+                    afi=gobgp_pb2.Family.AFI_IP,
+                    safi=gobgp_pb2.Family.SAFI_MPLS_VPN
+                ),
+                enabled=True
+            )
+        )
+    )
+    afi_safis.append(
+        gobgp_pb2.AfiSafi(
+            config=gobgp_pb2.AfiSafiConfig(
+                family=gobgp_pb2.Family(
+                    afi=gobgp_pb2.Family.AFI_L2VPN,
+                    safi=gobgp_pb2.Family.SAFI_EVPN
+                ),
+                enabled=True
+            )
+        )
+    )
+    afi_safis.append(
+        gobgp_pb2.AfiSafi(
+            config=gobgp_pb2.AfiSafiConfig(
+                family=gobgp_pb2.Family(
+                    afi=gobgp_pb2.Family.AFI_IP,
+                    safi=gobgp_pb2.Family.SAFI_ROUTE_TARGET_CONSTRAINTS
+                ),
+                enabled=True
+            )
+        )
+    )
+    add_peer_internal(active_bgp, local_ip, afi_safis)
 
 def auto_discover_peer():
     all_net_card, _, _ = get_physical_netcard()
@@ -106,4 +183,25 @@ def auto_discover_peer():
     run_scan_host(all_net)
     while (not build_all_task) or (scan_done < scan_task):
         time.sleep(1)
-    add_peer(active_bgp, local_ip)
+    add_l2vpn_evpn_peer(active_bgp, local_ip)
+
+
+def watch_internal():
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub = gobgp_pb2_grpc.GobgpApiStub(channel)
+
+        print('call watch')
+        r = stub.WatchEvent(
+            gobgp_pb2.WatchEventRequest(
+                table=gobgp_pb2.WatchEventRequest.Table(
+                    filters=[
+                        gobgp_pb2.WatchEventRequest.Table.Filter(
+                            type=gobgp_pb2.WatchEventRequest.Table.Filter.ADJIN,
+                            init=1
+                        )
+                    ]
+                )
+            ),
+            _TIMEOUT_SECONDS,
+        )
+        print(r.Recv())
