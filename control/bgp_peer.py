@@ -1,5 +1,7 @@
 #!/usr/bin/env python
+from pydoc import safeimport
 from api import *
+from api.gobgp_pb2 import Family
 from net_base import *
 
 import grpc
@@ -186,22 +188,73 @@ def auto_discover_peer():
     add_l2vpn_evpn_peer(active_bgp, local_ip)
 
 
-def watch_internal():
+mval = {}
+def watch_internal(read_all_msg=False):
+    global mval
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
 
-        print('call watch')
         r = stub.WatchEvent(
             gobgp_pb2.WatchEventRequest(
                 table=gobgp_pb2.WatchEventRequest.Table(
                     filters=[
                         gobgp_pb2.WatchEventRequest.Table.Filter(
                             type=gobgp_pb2.WatchEventRequest.Table.Filter.ADJIN,
-                            init=1
+                            init=read_all_msg
                         )
                     ]
                 )
             ),
             _TIMEOUT_SECONDS,
         )
-        print(r.Recv())
+
+        def unpack_msg(msg, msg_type, ret='default'):
+            global mval
+            mval[ret] = getattr(attribute_pb2, msg_type)()
+            return msg.Unpack(mval[ret])
+
+        for a in r:
+            for p in a.table.paths:
+                if p.family.afi == gobgp_pb2.Family.AFI_IP \
+                    and p.family.safi == gobgp_pb2.Family.SAFI_ROUTE_TARGET_CONSTRAINTS:
+                    unpack_msg(p.nlri, 'RouteTargetMembershipNLRI')
+                    v = mval['default']
+                    unpack_msg(v.rt, 'TwoOctetAsSpecificExtended', 'rt')
+                    rt = mval['rt']
+                    print('msg vrf:')
+                    print('bgp as:', v.asn, 'rt:', rt.asn, rt.local_admin)
+
+                elif p.family.afi == gobgp_pb2.Family.AFI_L2VPN \
+                    and p.family.safi == gobgp_pb2.Family.SAFI_EVPN:
+                    if unpack_msg(p.nlri, 'EVPNEthernetAutoDiscoveryRoute'):
+                        print(mval['default'])
+
+                    elif unpack_msg(p.nlri, 'EVPNMACIPAdvertisementRoute'):
+                        v = mval['default']
+                        rd = attribute_pb2.RouteDistinguisherTwoOctetASN()
+                        v.rd.Unpack(rd)
+                        print('msg evpn rt2:')
+                        print(v.ip_address, v.mac_address, 
+                            'vni:', v.labels, 'vrf:', rd.admin, rd.assigned)
+
+                    elif unpack_msg(p.nlri, 'EVPNInclusiveMulticastEthernetTagRoute'):
+                        v = mval['default']
+                        rd = attribute_pb2.RouteDistinguisherTwoOctetASN()
+                        v.rd.Unpack(rd)
+                        print('msg evpn rt3:')
+                        for pa in p.pattrs:
+                            if unpack_msg(pa, 'PmsiTunnelAttribute', 'psi'):
+                                print(v.ip_address, 'vrf:', rd.admin, rd.assigned, 
+                                    'vni:', mval['psi'].label)
+
+                    elif unpack_msg(p.nlri, 'EVPNEthernetSegmentRoute'):
+                        print(mval['default'])
+
+                    elif unpack_msg(p.nlri, 'EVPNIPPrefixRoute'):
+                        print(mval['default'])
+
+                    elif unpack_msg(p.nlri, 'EVPNIPMSIRoute'):
+                        print(mval['default'])
+
+
+                print('----------------------------------------')

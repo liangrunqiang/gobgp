@@ -217,7 +217,6 @@ func getValidation(v map[*table.Path]*table.Validation, p *table.Path) *table.Va
 }
 
 func (s *server) ListPath(r *api.ListPathRequest, stream api.GobgpApi_ListPathServer) error {
-	fmt.Printf("call grpc listpath\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	l := make([]*api.Destination, 0)
@@ -236,7 +235,6 @@ func (s *server) ListPath(r *api.ListPathRequest, stream api.GobgpApi_ListPathSe
 }
 
 func (s *server) WatchEvent(r *api.WatchEventRequest, stream api.GobgpApi_WatchEventServer) error {
-	fmt.Printf("call grpc watch\n")
 	ctx, cancel := context.WithCancel(context.Background())
 	s.bgpServer.WatchEvent(ctx, r, func(rsp *api.WatchEventResponse) {
 		if err := stream.Send(rsp); err != nil {

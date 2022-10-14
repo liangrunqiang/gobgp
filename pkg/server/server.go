@@ -4002,10 +4002,8 @@ func (s *BgpServer) WatchEvent(ctx context.Context, r *api.WatchEventRequest, fn
 		return fmt.Errorf("nil request")
 	}
 
-	fmt.Printf("in watch\n")
 	opts := make([]watchOption, 0)
 	if r.GetPeer() != nil {
-		fmt.Printf("watch peer\n")
 		opts = append(opts, watchPeer())
 	}
 	if t := r.GetTable(); t != nil {
@@ -4013,13 +4011,10 @@ func (s *BgpServer) WatchEvent(ctx context.Context, r *api.WatchEventRequest, fn
 			switch filter.Type {
 			case api.WatchEventRequest_Table_Filter_BEST:
 				opts = append(opts, watchBestPath(filter.Init))
-				fmt.Printf("watch best\n")
 			case api.WatchEventRequest_Table_Filter_ADJIN:
 				opts = append(opts, watchUpdate(filter.Init, ""))
-				fmt.Printf("watch adj\n")
 			case api.WatchEventRequest_Table_Filter_POST_POLICY:
 				opts = append(opts, watchPostUpdate(filter.Init, ""))
-				fmt.Printf("watch policy\n")
 			}
 		}
 	}
