@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from api import *
+from control_plane.gobgp.api import *
 from google.protobuf.any_pb2 import Any
 import grpc
 
@@ -89,4 +89,5 @@ def list_vrf_internal(name=''):
                     "rd":rd,
                     "import_rt":imports,
                     "export_rt":exports}
+            print(all_vrf)
     return all_vrf

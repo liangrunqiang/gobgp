@@ -1,9 +1,11 @@
 #!/usr/bin/env python
-from bgp_peer import *
-from bgp_path import *
-from bgp_vrf import *
+from control_plane.gobgp.control.bgp_peer import *
+from control_plane.gobgp.control.bgp_path import *
+from control_plane.gobgp.control.bgp_vrf import *
+from control_plane.eflyconf.gen import get_pid
 import sys, argparse
 import bgp_control as this
+import signal
 
 def is_int(a):
     if isinstance(a, int):
@@ -36,9 +38,27 @@ def fun_gen(**a1):
     return func_deco
 
 
-@fun_gen()
+@fun_gen(
+    peer_asn=[1,'int'],
+    peer_port=[179,'int'],
+    interface=['','str'],
+    graceful_restart=[0,int])
 def find_peer(**argv):
-    auto_discover_peer()
+    auto_discover_peer(**argv)
+
+@fun_gen(
+    peer_group=['','str'],
+    peer_asn=[1,'int'],
+    peer_addr=['','str'],
+    peer_port=[179,'int'],
+    peer_proto=['ipv4','str'],
+    reflector_client=['','str'],
+    route_server_client=['','str'],
+    graceful_restart=[0,'int'],
+    just_vrf=['','str']
+)
+def add_peer(**argv):
+    add_peer_byhand(**argv)
 
 
 @fun_gen()
@@ -49,6 +69,7 @@ def show_peer(**argv):
 @fun_gen(
     bgp_as=[0,'int'], 
     vrf_name=['','str'], 
+    local_pref=[0,'int'],
     prefix=['','str'], 
     prefix_len=[0,'int'], 
     hop=['0.0.0.0','str'],
@@ -63,6 +84,7 @@ def add_path(**argv):
 @fun_gen(
     bgp_as=[0,'int'], 
     vrf_name=['','str'], 
+    local_pref=[0,'int'],
     prefix=['','str'], 
     prefix_len=[0,'int'], 
     hop=['0.0.0.0','str'],
@@ -99,12 +121,53 @@ def del_vrf(**argv):
     del_vrf_internal(**argv)
 
 
-@fun_gen()
+@fun_gen(read_history=['no','str'])
 def watch(**argv):
-    watch_internal()
+    watch_internal(**argv)
 
 
-if __name__ == '__main__':
+gobgp_start_flag = 0
+bgp_lock = threading.Lock()
+def gobgp_start(restart=0):
+    global gobgp_start_flag
+    if get_pid("gobgpd") == 0 or restart:
+        with bgp_lock:
+            os.system('/etc/vpc/bgp_init') ##这里一定要确保gobgpd启动完毕
+            if restart:
+                set_bgp_state_monitor()
+    gobgp_start_flag = 1
+
+
+def set_bgp_state_monitor():
+    add_peer_byhand(peer_asn=10000, peer_addr='1.1.1.1', peer_proto='ipv4')  #not use, just to flag bgp if is restart
+
+
+def get_bgp_state():
+    global gobgp_start_flag
+    while not gobgp_start_flag:
+        time.sleep(1)
+    try:
+        return list_peer_internal(addr='1.1.1.1')
+    except:
+        return False
+
+
+def set_bgp_state_and_check():
+    def checking():
+        while 1:
+            time.sleep(10)
+            with bgp_lock:
+                if not get_bgp_state():
+                    signal.alarm(1)
+                    time.sleep(10)
+                    exit(-1)
+    gobgp_start()
+    set_bgp_state_monitor()
+    t = threading.Thread(target=checking, args=())
+    t.start()
+    
+
+def main_func():
     if len(sys.argv) > 1 and hasattr(this, sys.argv[1]):
         opera = sys.argv[1]
         del sys.argv[1]
@@ -125,4 +188,9 @@ if __name__ == '__main__':
         print('vaild opera:')
         for opt in func_arg_require:
             print('\t\t %s ' % opt)
+
+if __name__ == '__main__':
+    main_func()
+else:
+    gobgp_start()
 
