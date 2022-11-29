@@ -161,7 +161,6 @@ def set_bgp_state_and_check():
                     signal.alarm(1)
                     time.sleep(10)
                     exit(-1)
-    gobgp_start()
     set_bgp_state_monitor()
     t = threading.Thread(target=checking, args=())
     t.start()

@@ -239,8 +239,8 @@ def watch_internal(read_history='', callback=False):
             return msg.Unpack(mval[ret])
 
         for a in r:
-            print(a)
             for p in a.table.paths:
+                print(p.nlri)
                 if p.family.afi == gobgp_pb2.Family.AFI_IP \
                     and p.family.safi == gobgp_pb2.Family.SAFI_ROUTE_TARGET_CONSTRAINTS:
                     unpack_msg(p.nlri, 'RouteTargetMembershipNLRI')
@@ -296,7 +296,21 @@ def watch_internal(read_history='', callback=False):
                         print(mval['default'])
 
                     elif unpack_msg(p.nlri, 'EVPNIPPrefixRoute'):
-                        print(mval['default'])
+                        v = mval['default']
+                        rd = attribute_pb2.RouteDistinguisherTwoOctetASN()
+                        v.rd.Unpack(rd)
+                        print('msg evpn rt5:')
+                        vrf = rd.admin
+                        is_del = 1
+                        ip_prefix = v.ip_prefix
+                        ip_prefix_len = v.ip_prefix_len
+                        gateway = v.gw_address
+                        for pa in p.pattrs:
+                            if unpack_msg(pa, 'MpReachNLRIAttribute', 'hop'):
+                                is_del = 0
+                        print(vrf, ip_prefix, ip_prefix_len, gateway)
+                        if callback:
+                            callback(msg_type='evpn-rt5', vrf=int(vrf), prefix=ip_prefix, prefix_len=ip_prefix_len, gw=gateway, is_del=is_del)
 
                     elif unpack_msg(p.nlri, 'EVPNIPMSIRoute'):
                         print(mval['default'])

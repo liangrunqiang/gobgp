@@ -120,6 +120,34 @@ def make_path_evpn_rt3(bgp_as, vrf_name, vtep_ip, vni, hop):
     return path
 
 
+def make_path_evpn_rt5(bgp_as, vrf_name, ip_prefix, ip_len, hop):
+    vrf_info = list_vrf_internal(vrf_name)
+    if not len(vrf_info):
+        raise Exception("vrf not found")
+    
+    v = 0
+    rt5_info = Any()
+    rt5_info.Pack(
+        attribute_pb2.EVPNIPPrefixRoute(
+            rd=make_vrf_rd_pack(vrf_info[vrf_name]['rd'].admin, vrf_info[vrf_name]['rd'].assigned),
+            esi=attribute_pb2.EthernetSegmentIdentifier(
+                type=0,
+                value=v.to_bytes(4, byteorder="big")
+            ),
+            ethernet_tag=0,
+            ip_prefix=ip_prefix,
+            ip_prefix_len=ip_len,
+            gw_address=hop
+        )
+    )
+
+    path=gobgp_pb2.Path(
+                        nlri=rt5_info,
+                        pattrs=make_path_next_hop(bgp_as, '0.0.0.0'),
+                        family=gobgp_pb2.Family(afi=gobgp_pb2.Family.AFI_L2VPN, safi=gobgp_pb2.Family.SAFI_EVPN),
+                    )
+    return path
+
 
 def add_path_internal(bgp_as=1, vrf_name=0, local_pref=0, prefix='', prefix_len=0, hop='', mac='', vni='', path_type=''):
     with grpc.insecure_channel('localhost:50051') as channel:
@@ -132,6 +160,8 @@ def add_path_internal(bgp_as=1, vrf_name=0, local_pref=0, prefix='', prefix_len=
             path = make_path_evpn_rt2(bgp_as, vrf_name, vni, prefix, mac, hop)
         elif path_type == 'evpn-rt3':
             path = make_path_evpn_rt3(bgp_as, vrf_name, prefix, vni, hop)
+        elif path_type == 'evpn-rt5':
+            path = make_path_evpn_rt5(bgp_as, vrf_name, prefix, prefix_len, hop)
         else:
             raise Exception("unknow route type")
         if not len(vrf_name):
@@ -163,6 +193,8 @@ def del_path_internal(bgp_as=1, vrf_name=0, local_pref=0, prefix='', prefix_len=
             path = make_path_evpn_rt2(bgp_as, vrf_name, vni, prefix, mac, hop)
         elif path_type == 'evpn-rt3':
             path = make_path_evpn_rt3(bgp_as, vrf_name, prefix, vni, hop)
+        elif path_type == 'evpn-rt5':
+            path = make_path_evpn_rt5(bgp_as, vrf_name, prefix, prefix_len, hop)
         else:
             raise Exception("unknow route type")
         if not len(vrf_name):
