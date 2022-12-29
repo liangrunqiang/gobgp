@@ -1173,9 +1173,8 @@ func Test_MpReachNLRIAttribute_MUPInterworkSegmentDiscoveryRoute(t *testing.T) {
 	})
 	assert.Nil(err)
 	a, err := apb.New(&api.MUPInterworkSegmentDiscoveryRoute{
-		Rd:           rd,
-		PrefixLength: 24,
-		Prefix:       "10.0.0.0/24",
+		Rd:     rd,
+		Prefix: "10.0.0.0/24",
 	})
 	assert.Nil(err)
 	nlris = append(nlris, a)
@@ -1259,8 +1258,7 @@ func Test_MpReachNLRIAttribute_MUPType1SessionTransformedRoute(t *testing.T) {
 	assert.Nil(err)
 	a, err := apb.New(&api.MUPType1SessionTransformedRoute{
 		Rd:                    rd,
-		PrefixLength:          32,
-		Prefix:                "192.168.100.1",
+		Prefix:                "192.168.100.1/32",
 		Teid:                  12345,
 		Qfi:                   9,
 		EndpointAddressLength: 32,
@@ -1791,7 +1789,10 @@ func TestFullCyclePrefixSID(t *testing.T) {
 				t.Fatalf("test failed with error: %+v", err)
 			}
 			// Converting from Native to API
-			apiPrefixSID, _ := NewPrefixSIDAttributeFromNative(&attribute)
+			apiPrefixSID, err := NewPrefixSIDAttributeFromNative(&attribute)
+			if err != nil {
+				t.Fatalf("test failed with error: %+v", err)
+			}
 			// Converting back from API to Native
 			recoveredPrefixSID, err := UnmarshalPrefixSID(apiPrefixSID)
 			if err != nil {

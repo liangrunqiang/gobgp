@@ -89,7 +89,7 @@ const (
 )
 
 type MUPRouteTypeInterface interface {
-	DecodeFromBytes([]byte) error
+	DecodeFromBytes([]byte, uint16) error
 	Serialize() ([]byte, error)
 	AFI() uint16
 	Len() int
@@ -122,6 +122,7 @@ func getMUPRouteType(at uint8, rt uint16) (MUPRouteTypeInterface, error) {
 
 type MUPNLRI struct {
 	PrefixDefault
+	Afi              uint16
 	ArchitectureType uint8
 	RouteType        uint16
 	Length           uint8
@@ -144,7 +145,7 @@ func (n *MUPNLRI) DecodeFromBytes(data []byte, options ...*MarshallingOption) er
 		return err
 	}
 	n.RouteTypeData = r
-	return n.RouteTypeData.DecodeFromBytes(data[:n.Length])
+	return n.RouteTypeData.DecodeFromBytes(data[:n.Length], n.Afi)
 }
 
 func (n *MUPNLRI) Serialize(options ...*MarshallingOption) ([]byte, error) {
@@ -160,7 +161,7 @@ func (n *MUPNLRI) Serialize(options ...*MarshallingOption) ([]byte, error) {
 }
 
 func (n *MUPNLRI) AFI() uint16 {
-	return n.RouteTypeData.AFI()
+	return n.Afi
 }
 
 func (n *MUPNLRI) SAFI() uint8 {
@@ -198,12 +199,13 @@ func (l *MUPNLRI) Flat() map[string]string {
 	return map[string]string{}
 }
 
-func NewMUPNLRI(at uint8, rt uint16, data MUPRouteTypeInterface) *MUPNLRI {
+func NewMUPNLRI(afi uint16, at uint8, rt uint16, data MUPRouteTypeInterface) *MUPNLRI {
 	var l uint8
 	if data != nil {
 		l = uint8(data.Len())
 	}
 	return &MUPNLRI{
+		Afi:              afi,
 		ArchitectureType: at,
 		RouteType:        rt,
 		Length:           l,
@@ -211,35 +213,94 @@ func NewMUPNLRI(at uint8, rt uint16, data MUPRouteTypeInterface) *MUPNLRI {
 	}
 }
 
+func TEIDString(nlri AddrPrefixInterface) string {
+	s := ""
+	switch n := nlri.(type) {
+	case *MUPNLRI:
+		switch route := n.RouteTypeData.(type) {
+		case *MUPType1SessionTransformedRoute:
+			s = fmt.Sprintf("%d", route.TEID)
+		default:
+			s = ""
+		}
+	}
+	return s
+}
+
+func QFIString(nlri AddrPrefixInterface) string {
+	s := ""
+	switch n := nlri.(type) {
+	case *MUPNLRI:
+		switch route := n.RouteTypeData.(type) {
+		case *MUPType1SessionTransformedRoute:
+			s = fmt.Sprintf("%d", route.QFI)
+		default:
+			s = ""
+		}
+	}
+	return s
+}
+
+func EndpointString(nlri AddrPrefixInterface) string {
+	s := ""
+	switch n := nlri.(type) {
+	case *MUPNLRI:
+		switch route := n.RouteTypeData.(type) {
+		case *MUPType1SessionTransformedRoute:
+			s = route.EndpointAddress.String()
+		default:
+			s = ""
+		}
+	}
+	return s
+}
+
 // MUPInterworkSegmentDiscoveryRoute represents BGP Interwork Segment Discovery route as described in
 // https://datatracker.ietf.org/doc/html/draft-mpmz-bess-mup-safi-00#section-3.1.1
 type MUPInterworkSegmentDiscoveryRoute struct {
-	RD           RouteDistinguisherInterface
-	PrefixLength uint8
-	Prefix       netip.Prefix
+	RD     RouteDistinguisherInterface
+	Prefix netip.Prefix
 }
 
 func NewMUPInterworkSegmentDiscoveryRoute(rd RouteDistinguisherInterface, prefix netip.Prefix) *MUPNLRI {
-	return NewMUPNLRI(MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_INTERWORK_SEGMENT_DISCOVERY, &MUPInterworkSegmentDiscoveryRoute{
-		RD:           rd,
-		PrefixLength: uint8(prefix.Bits()),
-		Prefix:       prefix,
+	afi := uint16(AFI_IP)
+	if prefix.Addr().Is6() {
+		afi = AFI_IP6
+	}
+	return NewMUPNLRI(afi, MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_INTERWORK_SEGMENT_DISCOVERY, &MUPInterworkSegmentDiscoveryRoute{
+		RD:     rd,
+		Prefix: prefix,
 	})
 }
 
-func (r *MUPInterworkSegmentDiscoveryRoute) DecodeFromBytes(data []byte) error {
+func (r *MUPInterworkSegmentDiscoveryRoute) DecodeFromBytes(data []byte, afi uint16) error {
 	r.RD = GetRouteDistinguisher(data)
 	p := r.RD.Len()
 	if len(data) < p {
 		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "invalid Interwork Segment Discovery Route length")
 	}
-	r.PrefixLength = data[p]
+	bits := int(data[p])
 	p += 1
-	addr, ok := netip.AddrFromSlice(data[p:])
+	byteLen := (bits + 7) / 8
+	if len(data[p:]) < byteLen {
+		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "prefix bytes is short")
+	}
+	addrLen := 4
+	if afi == AFI_IP6 {
+		addrLen = 16
+	}
+	if bits > addrLen*8 {
+		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "prefix length is too long")
+	}
+	b := data[p:]
+	if addrLen > len(data[p:]) {
+		b = append(b, make([]byte, addrLen-len(data[p:]))...)
+	}
+	addr, ok := netip.AddrFromSlice(b)
 	if !ok {
 		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix: %x", data[p:]))
 	}
-	r.Prefix = netip.PrefixFrom(addr, int(r.PrefixLength))
+	r.Prefix = netip.PrefixFrom(addr, bits)
 	if r.Prefix.Bits() == -1 {
 		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix: %s", r.Prefix))
 	}
@@ -257,8 +318,9 @@ func (r *MUPInterworkSegmentDiscoveryRoute) Serialize() ([]byte, error) {
 	} else {
 		buf = make([]byte, 8)
 	}
-	buf = append(buf, r.PrefixLength)
-	buf = append(buf, r.Prefix.Addr().AsSlice()...)
+	buf = append(buf, uint8(r.Prefix.Bits()))
+	byteLen := (r.Prefix.Bits() + 7) / 8
+	buf = append(buf, r.Prefix.Addr().AsSlice()[:byteLen]...)
 	return buf, nil
 }
 
@@ -270,11 +332,14 @@ func (r *MUPInterworkSegmentDiscoveryRoute) AFI() uint16 {
 }
 
 func (r *MUPInterworkSegmentDiscoveryRoute) Len() int {
-	// RD(8) + PrefixLength(1) + Prefix(4 or 16)
-	return 9 + int(r.Prefix.Addr().BitLen()/8)
+	// RD(8) + PrefixLength(1) + Prefix(variable)
+	return 9 + (r.Prefix.Bits()+7)/8
 }
 
 func (r *MUPInterworkSegmentDiscoveryRoute) String() string {
+	// I-D.draft-mpmz-bess-mup-safi-01
+	// 3.1.1.  BGP Interwork Segment Discovery route
+	// For the purpose of BGP route key processing, only the RD, Prefix Length and Prefix are considered to be part of the prefix in the NLRI.
 	return fmt.Sprintf("[type:isd][rd:%s][prefix:%s]", r.RD, r.Prefix)
 }
 
@@ -300,13 +365,17 @@ type MUPDirectSegmentDiscoveryRoute struct {
 }
 
 func NewMUPDirectSegmentDiscoveryRoute(rd RouteDistinguisherInterface, address netip.Addr) *MUPNLRI {
-	return NewMUPNLRI(MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_DIRECT_SEGMENT_DISCOVERY, &MUPDirectSegmentDiscoveryRoute{
+	afi := uint16(AFI_IP)
+	if address.Is6() {
+		afi = AFI_IP6
+	}
+	return NewMUPNLRI(afi, MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_DIRECT_SEGMENT_DISCOVERY, &MUPDirectSegmentDiscoveryRoute{
 		RD:      rd,
 		Address: address,
 	})
 }
 
-func (r *MUPDirectSegmentDiscoveryRoute) DecodeFromBytes(data []byte) error {
+func (r *MUPDirectSegmentDiscoveryRoute) DecodeFromBytes(data []byte, afi uint16) error {
 	r.RD = GetRouteDistinguisher(data)
 	rdLen := r.RD.Len()
 	if len(data) != 12 && len(data) != 24 {
@@ -356,6 +425,9 @@ func (r *MUPDirectSegmentDiscoveryRoute) Len() int {
 }
 
 func (r *MUPDirectSegmentDiscoveryRoute) String() string {
+	// I-D.draft-mpmz-bess-mup-safi-01
+	// 3.1.2.  BGP Direct Segment Discovery route
+	// For the purpose of BGP route key processing, only the RD and Address are considered to be part of the prefix in the NLRI.
 	return fmt.Sprintf("[type:dsd][rd:%s][prefix:%s]", r.RD, r.Address)
 }
 
@@ -377,18 +449,20 @@ func (r *MUPDirectSegmentDiscoveryRoute) rd() RouteDistinguisherInterface {
 // https://datatracker.ietf.org/doc/html/draft-mpmz-bess-mup-safi-00#section-3.1.3
 type MUPType1SessionTransformedRoute struct {
 	RD                    RouteDistinguisherInterface
-	PrefixLength          uint8
-	Prefix                netip.Addr
+	Prefix                netip.Prefix
 	TEID                  uint32
 	QFI                   uint8
 	EndpointAddressLength uint8
 	EndpointAddress       netip.Addr
 }
 
-func NewMUPType1SessionTransformedRoute(rd RouteDistinguisherInterface, prefix netip.Addr, teid uint32, qfi uint8, ea netip.Addr) *MUPNLRI {
-	return NewMUPNLRI(MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_TYPE_1_SESSION_TRANSFORMED, &MUPType1SessionTransformedRoute{
+func NewMUPType1SessionTransformedRoute(rd RouteDistinguisherInterface, prefix netip.Prefix, teid uint32, qfi uint8, ea netip.Addr) *MUPNLRI {
+	afi := uint16(AFI_IP)
+	if prefix.Addr().Is6() {
+		afi = uint16(AFI_IP6)
+	}
+	return NewMUPNLRI(afi, MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_TYPE_1_SESSION_TRANSFORMED, &MUPType1SessionTransformedRoute{
 		RD:                    rd,
-		PrefixLength:          uint8(prefix.BitLen()),
 		Prefix:                prefix,
 		TEID:                  teid,
 		QFI:                   qfi,
@@ -397,24 +471,38 @@ func NewMUPType1SessionTransformedRoute(rd RouteDistinguisherInterface, prefix n
 	})
 }
 
-func (r *MUPType1SessionTransformedRoute) DecodeFromBytes(data []byte) error {
+func (r *MUPType1SessionTransformedRoute) DecodeFromBytes(data []byte, afi uint16) error {
 	r.RD = GetRouteDistinguisher(data)
 	p := r.RD.Len()
 	if len(data) < p {
 		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "invalid 3GPP 5G specific Type 1 Session Transformed Route length")
 	}
-	r.PrefixLength = data[p]
+	prefixLength := int(data[p])
 	p += 1
-	if r.PrefixLength == 32 || r.PrefixLength == 128 {
-		prefix, ok := netip.AddrFromSlice(data[p : p+int(r.PrefixLength/8)])
-		if !ok {
-			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix: %x", data[p:p+int(r.PrefixLength/8)]))
+	switch afi {
+	case AFI_IP:
+		if prefixLength > 32 {
+			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix length: %d", prefixLength))
 		}
-		r.Prefix = prefix
-	} else {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix length: %d", r.PrefixLength))
+		addr, ok := netip.AddrFromSlice(data[p : p+4])
+		if !ok {
+			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix: %x", data[p:p+4]))
+		}
+		r.Prefix = netip.PrefixFrom(addr, prefixLength)
+		p += 4
+	case AFI_IP6:
+		if prefixLength > 128 {
+			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix length: %d", prefixLength))
+		}
+		addr, ok := netip.AddrFromSlice(data[p : p+16])
+		if !ok {
+			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Prefix: %x", data[p:p+16]))
+		}
+		r.Prefix = netip.PrefixFrom(addr, prefixLength)
+		p += 16
+	default:
+		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid AFI: %d", afi))
 	}
-	p += int(r.PrefixLength / 8)
 	r.TEID = binary.BigEndian.Uint32(data[p : p+4])
 	if r.TEID == 0 {
 		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid TEID: %d", r.TEID))
@@ -447,8 +535,8 @@ func (r *MUPType1SessionTransformedRoute) Serialize() ([]byte, error) {
 	} else {
 		buf = make([]byte, 8)
 	}
-	buf = append(buf, r.PrefixLength)
-	buf = append(buf, r.Prefix.AsSlice()...)
+	buf = append(buf, byte(r.Prefix.Bits()))
+	buf = append(buf, r.Prefix.Addr().AsSlice()...)
 	t := make([]byte, 4)
 	binary.BigEndian.PutUint32(t, r.TEID)
 	buf = append(buf, t...)
@@ -459,7 +547,7 @@ func (r *MUPType1SessionTransformedRoute) Serialize() ([]byte, error) {
 }
 
 func (r *MUPType1SessionTransformedRoute) AFI() uint16 {
-	if r.Prefix.Is6() {
+	if r.Prefix.Addr().Is6() {
 		return AFI_IP6
 	}
 	return AFI_IP
@@ -468,11 +556,14 @@ func (r *MUPType1SessionTransformedRoute) AFI() uint16 {
 func (r *MUPType1SessionTransformedRoute) Len() int {
 	// RD(8) + PrefixLength(1) + Prefix(4 or 16)
 	// + TEID(4) + QFI(1) + EndpointAddressLength(1) + EndpointAddress(4 or 16)
-	return 15 + int(r.PrefixLength/8) + int(r.EndpointAddressLength/8)
+	return 15 + r.Prefix.Addr().BitLen()/8 + int(r.EndpointAddressLength/8)
 }
 
 func (r *MUPType1SessionTransformedRoute) String() string {
-	return fmt.Sprintf("[type:t1st][rd:%s][prefix:%s][teid:%d][qfi:%d][endpoint:%s]", r.RD, r.Prefix, r.TEID, r.QFI, r.EndpointAddress)
+	// I-D.draft-mpmz-bess-mup-safi-01
+	// 3.1.3.  BGP Type 1 Session Transformed (ST) Route
+	// For the purpose of BGP route key processing, only the RD, Prefix Length and Prefix are considered to be part of the prefix in the NLRI.
+	return fmt.Sprintf("[type:t1st][rd:%s][prefix:%s]", r.RD, r.Prefix)
 }
 
 func (r *MUPType1SessionTransformedRoute) MarshalJSON() ([]byte, error) {
@@ -505,7 +596,11 @@ type MUPType2SessionTransformedRoute struct {
 }
 
 func NewMUPType2SessionTransformedRoute(rd RouteDistinguisherInterface, ea netip.Addr, teid uint32) *MUPNLRI {
-	return NewMUPNLRI(MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_TYPE_2_SESSION_TRANSFORMED, &MUPType2SessionTransformedRoute{
+	afi := uint16(AFI_IP)
+	if ea.Is6() {
+		afi = AFI_IP6
+	}
+	return NewMUPNLRI(afi, MUP_ARCH_TYPE_3GPP_5G, MUP_ROUTE_TYPE_TYPE_2_SESSION_TRANSFORMED, &MUPType2SessionTransformedRoute{
 		RD:                    rd,
 		EndpointAddressLength: uint8(ea.BitLen()) + 32,
 		EndpointAddress:       ea,
@@ -513,7 +608,7 @@ func NewMUPType2SessionTransformedRoute(rd RouteDistinguisherInterface, ea netip
 	})
 }
 
-func (r *MUPType2SessionTransformedRoute) DecodeFromBytes(data []byte) error {
+func (r *MUPType2SessionTransformedRoute) DecodeFromBytes(data []byte, afi uint16) error {
 	r.RD = GetRouteDistinguisher(data)
 	p := r.RD.Len()
 	if len(data) < p {
@@ -524,22 +619,23 @@ func (r *MUPType2SessionTransformedRoute) DecodeFromBytes(data []byte) error {
 	var ea netip.Addr
 	var ok bool
 	teidLen := 0
-	if r.EndpointAddressLength >= 32 && r.EndpointAddressLength <= 64 {
+	switch afi {
+	case AFI_IP:
 		ea, ok = netip.AddrFromSlice(data[p : p+4])
 		if !ok {
 			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Endpoint Address: %x", data[p:p+int(r.EndpointAddressLength/8)]))
 		}
 		p += 4
 		teidLen = int(r.EndpointAddressLength)/8 - 4
-	} else if r.EndpointAddressLength >= 128 && r.EndpointAddressLength <= 160 {
+	case AFI_IP6:
 		ea, ok = netip.AddrFromSlice(data[p : p+16])
 		if !ok {
 			return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Endpoint Address: %x", data[p:p+int(r.EndpointAddressLength/8)]))
 		}
 		p += 16
 		teidLen = int(r.EndpointAddressLength)/8 - 16
-	} else {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid Endpoint Address length: %d", r.EndpointAddressLength))
+	default:
+		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Invalid AFI: %d", afi))
 	}
 	r.EndpointAddress = ea
 	if teidLen > 0 {
@@ -586,6 +682,9 @@ func (r *MUPType2SessionTransformedRoute) Len() int {
 }
 
 func (r *MUPType2SessionTransformedRoute) String() string {
+	// I-D.draft-mpmz-bess-mup-safi-01
+	// 3.1.4.  BGP Type 2 Session Transformed (ST) Route
+	// For the purpose of BGP route key processing, only the RD, Endpoint Address and Architecture specific Endpoint Identifier are considered to be part of the prefix in the NLRI.
 	return fmt.Sprintf("[type:t2st][rd:%s][endpoint:%s][teid:%d]", r.RD, r.EndpointAddress, r.TEID)
 }
 
