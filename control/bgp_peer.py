@@ -25,7 +25,6 @@ def scan_host(ip, port):
     global scan_lock
     global scan_thread
     global scan_done
-    print('scan', ip)
     s = socket.socket()
     try:
         s.settimeout(3)
@@ -89,7 +88,7 @@ def list_peer_info(stub, addr=''):
 def list_peer_internal(addr=''):
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
-        list_peer_info(stub, addr=addr)
+        return list_peer_info(stub, addr=addr)
 
 def add_peer_internal(active_bgp, local_ip, afi_safis, peer_group='', peer_asn=1, peer_port=179, route_reflector_client=False, route_server_client=False, graceful_restart=0, just_vrf=''):
     with grpc.insecure_channel('localhost:50051') as channel:
@@ -174,7 +173,6 @@ def make_peer_family(proto_list, graceful_restart=0):
                 )
             )
         )
-    print(afi_safis)
     return afi_safis
 
 
@@ -222,7 +220,7 @@ def watch_internal(read_history='', callback=False):
                 table=gobgp_pb2.WatchEventRequest.Table(
                     filters=[
                         gobgp_pb2.WatchEventRequest.Table.Filter(
-                            type=gobgp_pb2.WatchEventRequest.Table.Filter.ADJIN,
+                            type=gobgp_pb2.WatchEventRequest.Table.Filter.BEST,
                             init=read_history
                         )
                     ]
@@ -239,8 +237,8 @@ def watch_internal(read_history='', callback=False):
             return msg.Unpack(mval[ret])
 
         for a in r:
+            print('--------------------------------------bgp info---------------------------------------------')
             for p in a.table.paths:
-                print(p.nlri)
                 if p.family.afi == gobgp_pb2.Family.AFI_IP \
                     and p.family.safi == gobgp_pb2.Family.SAFI_ROUTE_TARGET_CONSTRAINTS:
                     unpack_msg(p.nlri, 'RouteTargetMembershipNLRI')
@@ -260,16 +258,15 @@ def watch_internal(read_history='', callback=False):
                         rd = attribute_pb2.RouteDistinguisherTwoOctetASN()
                         v.rd.Unpack(rd)
                         print('msg evpn rt2:')
-                        is_del = 1
+                        is_del = p.is_withdraw
                         endpoint = ''
                         ip = v.ip_address
                         mac = v.mac_address
-                        vni = v.labels
+                        vni = v.labels[0]
                         vrf = rd.admin
                         for pa in p.pattrs:
                             if unpack_msg(pa, 'MpReachNLRIAttribute', 'hop'):
                                 endpoint = mval['hop'].next_hops[0]
-                                is_del = 0
                         print(ip, mac, vni, vrf, endpoint)
                         if callback:
                             callback(msg_type='evpn-rt2', vrf=int(vrf), vni=int(vni), ip=ip, mac=mac, endpoint=endpoint, is_del=is_del)
@@ -279,7 +276,7 @@ def watch_internal(read_history='', callback=False):
                         rd = attribute_pb2.RouteDistinguisherTwoOctetASN()
                         v.rd.Unpack(rd)
                         print('msg evpn rt3:')
-                        is_del = 1
+                        is_del = p.is_withdraw
                         endpoint = v.ip_address
                         vni = v.ethernet_tag
                         vrf = rd.admin
@@ -287,7 +284,6 @@ def watch_internal(read_history='', callback=False):
                             if unpack_msg(pa, 'PmsiTunnelAttribute', 'psi'):
                                 endpoint = int2ip(int.from_bytes(mval['psi'].id, 'big'))
                                 vni = mval['psi'].label
-                                is_del = 0
                         print(endpoint, vni, vrf)
                         if callback:
                             callback(msg_type='evpn-rt3', vrf=int(vrf), vni=int(vni), endpoint=endpoint, is_del=is_del)
@@ -301,13 +297,10 @@ def watch_internal(read_history='', callback=False):
                         v.rd.Unpack(rd)
                         print('msg evpn rt5:')
                         vrf = rd.admin
-                        is_del = 1
+                        is_del = p.is_withdraw
                         ip_prefix = v.ip_prefix
                         ip_prefix_len = v.ip_prefix_len
                         gateway = v.gw_address
-                        for pa in p.pattrs:
-                            if unpack_msg(pa, 'MpReachNLRIAttribute', 'hop'):
-                                is_del = 0
                         print(vrf, ip_prefix, ip_prefix_len, gateway)
                         if callback:
                             callback(msg_type='evpn-rt5', vrf=int(vrf), prefix=ip_prefix, prefix_len=ip_prefix_len, gw=gateway, is_del=is_del)

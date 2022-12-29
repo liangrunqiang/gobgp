@@ -1,0 +1,43 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          mongod
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start mongod at boot time
+# Description:       Enable service provided by mongod.
+### END INIT INFO
+
+start()
+{
+    /mnt/code/ecloud_mingle/control_plane/gobgp/cmd/gobgpd/gobgpd -f /etc/vpc/bgp.config &
+    exit 0;
+}
+
+stop()
+{
+   ps -ef | grep gobgpd | grep -v grep | cut -c 9-15 | xargs kill -9
+}
+
+case "$1" in
+start)
+    start
+    ;;
+
+stop)
+    stop
+    ;;
+
+restart)
+    stop
+    start
+    ;;
+
+*)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 0
+    ;;
+
+esac
+exit 0

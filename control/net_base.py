@@ -2,20 +2,31 @@ import psutil
 import os
 import struct
 import socket
+import IPy
 
 def mac2int(mac_str):
-    return int(mac_str.translate(None, ":.- "), 16)
-
+    try:
+        trans=str.maketrans({key: None for key in ":.- "})
+        return int(mac_str.translate(trans), 16)
+    except:
+        return 0
+    
 def int2mac(mac):
     mac_hex = "{:012x}".format(mac)
     mac_str = ":".join(mac_hex[i:i+2] for i in range(0, len(mac_hex), 2))
     return mac_str
 
 def ip2int(addr):
-    return struct.unpack("!I", socket.inet_aton(str(addr)))[0]
+    try:
+        return struct.unpack("!I", socket.inet_aton(str(addr)))[0]
+    except:
+        return 0
 
 def ip62int(addr6):
-    return struct.unpack('!QQ', socket.inet_pton(socket.AF_INET6, addr6))
+    try:
+        return struct.unpack('!QQ', socket.inet_pton(socket.AF_INET6, addr6))
+    except:
+        return 0
 
 def ip6_add_ip4(prefix, ip4):
     v6hi, v6lo = struct.unpack('!QQ', socket.inet_pton(socket.AF_INET6, prefix))
@@ -61,7 +72,9 @@ def ip_to_int(a, b, c, d):
 
 def mac_to_ipv6_linklocal(mac):
     # Remove the most common delimiters; dots, dashes, etc.
-    mac_value = int(mac.translate(None, ' .:-'), 16)
+    #mac_value = int(mac.translate(None, ' .:-'), 16)
+    trans=str.maketrans({key: None for key in ":.- "})
+    mac_value = int(mac.translate(trans), 16)
 
     # Split out the bytes that slot into the IPv6 address
     # XOR the most significant byte with 0x02, inverting the 
