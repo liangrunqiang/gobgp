@@ -11,7 +11,7 @@
 
 start()
 {
-    /mnt/code/ecloud_mingle/control_plane/gobgp/cmd/gobgpd/gobgpd -f /etc/vpc/bgp.config &
+    /root/gobgpd -f /etc/vpc/bgp.config &
     exit 0;
 }
 

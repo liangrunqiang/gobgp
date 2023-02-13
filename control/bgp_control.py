@@ -2,6 +2,7 @@
 from control_plane.gobgp.control.bgp_peer import *
 from control_plane.gobgp.control.bgp_path import *
 from control_plane.gobgp.control.bgp_vrf import *
+from control_plane.gobgp.control.bgp_policy import *
 from control_plane.gobgp.control import bgp_control as this
 from control_plane.eflyconf import gen
 import sys, argparse
@@ -126,6 +127,11 @@ def add_vrf(**argv):
 @fun_gen(name=['','str'])
 def del_vrf(**argv):
     del_vrf_internal(**argv)
+
+
+@fun_gen(name=['','str'])
+def show_policy(**argv):
+    list_policy_internal(**argv)
 
 
 @fun_gen(read_history=['no','str'])

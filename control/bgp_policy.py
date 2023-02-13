@@ -25,7 +25,7 @@ def make_policy_ext_community(name, define_set_name):
                     name=name,
                     statements=[
                         gobgp_pb2.Statement(
-                            name=name,
+                            name=name+'_stmt',
                             conditions=gobgp_pb2.Conditions(
                                 ext_community_set=gobgp_pb2.MatchSet(
                                     type=gobgp_pb2.MatchSet.Type.ANY,
@@ -40,6 +40,19 @@ def make_policy_ext_community(name, define_set_name):
                 )
 
 
+def list_policy_internal(name=''):
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub = gobgp_pb2_grpc.GobgpApiStub(channel)
+        policy = stub.ListPolicy(
+                gobgp_pb2.ListPolicyRequest(
+                    name=name
+                ),
+                _TIMEOUT_SECONDS,
+            )
+        for p in policy:
+            print(p)
+
+
 def make_neigh_vrf_policy(stub, vrf_name=''):
     try:
         vrf_info = list_vrf_internal(vrf_name)
@@ -51,14 +64,15 @@ def make_neigh_vrf_policy(stub, vrf_name=''):
     except:
         import_rt = vrf_name.split(',')[0]
         export_rt = vrf_name.split(',')[1]
-        irt = attribute_pb2.TwoOctetAsSpecificExtended(asn=int(import_rt.split('')[0]), local_admin=int(import_rt.split(':')[1]))
+        vrf_name = 'vrf_%d_%d' % (int(import_rt.split(':')[0]), int(export_rt.split(':')[0]))
+        irt = attribute_pb2.TwoOctetAsSpecificExtended(asn=int(import_rt.split(':')[0]), local_admin=int(import_rt.split(':')[1]))
         ert = attribute_pb2.TwoOctetAsSpecificExtended(asn=int(export_rt.split(':')[0]), local_admin=int(export_rt.split(':')[1]))
-    stub.AddDefinedSet(
-        gobgp_pb2.AddDefinedSetRequest(
-            defined_set=make_define_set_ext_community(vrf_name+'_import_set', 
-            ['rt:^%d:%d$' % (irt.asn, irt.local_admin)])
-        )
-    )
+    #stub.AddDefinedSet(
+    #    gobgp_pb2.AddDefinedSetRequest(
+    #        defined_set=make_define_set_ext_community(vrf_name+'_import_set', 
+    #        ['rt:^%d:%d$' % (irt.asn, irt.local_admin)])
+    #    )
+    #)
     stub.AddDefinedSet(
         gobgp_pb2.AddDefinedSetRequest(
             defined_set=make_define_set_ext_community(vrf_name+'_export_set', 
@@ -70,22 +84,24 @@ def make_neigh_vrf_policy(stub, vrf_name=''):
     #        policy=make_policy_ext_community(vrf_name+'_import_policy', vrf_name+'_import_set')
     #    )
     #)
-    #stub.AddPolicy(
-    #    gobgp_pb2.AddPolicyRequest(
-    #        policy=make_policy_ext_community(vrf_name+'_export_policy', vrf_name+'_export_set')
-    #    )
-    #)
+    stub.AddPolicy(
+        gobgp_pb2.AddPolicyRequest(
+            policy=make_policy_ext_community(vrf_name+'_export_policy', vrf_name+'_export_set')
+        )
+    )
     return gobgp_pb2.ApplyPolicy(
-        import_policy=gobgp_pb2.PolicyAssignment(
-            name=vrf_name+'_import',
-            direction=gobgp_pb2.PolicyDirection.IMPORT,
-            default_action=gobgp_pb2.RouteAction.REJECT,
-            policies=[make_policy_ext_community(vrf_name+'_export_policy', vrf_name+'_export_set')]
-        ),
+        #import_policy=gobgp_pb2.PolicyAssignment(
+        #    name=vrf_name+'_import',
+        #    direction=gobgp_pb2.PolicyDirection.IMPORT,
+        #    default_action=gobgp_pb2.RouteAction.REJECT,
+        #    #policies=[make_policy_ext_community(vrf_name+'_export_policy', vrf_name+'_export_set')]
+        #    policies=[gobgp_pb2.Policy(name='policy1')]
+        #),
         export_policy=gobgp_pb2.PolicyAssignment(
             name=vrf_name+'_export',
             direction=gobgp_pb2.PolicyDirection.EXPORT,
             default_action=gobgp_pb2.RouteAction.REJECT,
-            policies=[make_policy_ext_community(vrf_name+'_import_policy', vrf_name+'_import_set')]
+            #policies=[make_policy_ext_community(vrf_name+'_import_policy', vrf_name+'_import_set')]
+            policies=[gobgp_pb2.Policy(name=vrf_name+'_export_policy')]
         )
     )

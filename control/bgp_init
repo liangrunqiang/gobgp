@@ -3,7 +3,7 @@ systemctl restart gobgpd
 stat="context deadline exceeded"
 while [[ $stat == "context deadline exceeded" ]]
 do
-        stat=`control_plane/gobgp/cmd/gobgp/gobgp nei`
+        stat=`/root/gobgp nei`
         echo 'bgp start ing...'
         sleep 1
 done
