@@ -14,6 +14,7 @@ _TIMEOUT_SECONDS = 1000
 
 
 active_bgp = queue.Queue()
+bgp_lock = threading.Lock()
 scan_lock = threading.Lock()
 scan_thread = 0
 scan_task = 0
@@ -177,32 +178,34 @@ def make_peer_family(proto_list, graceful_restart=0):
 
 
 def auto_discover_peer(peer_port=179, peer_asn=1, graceful_restart=0, interface=''):
-    #all_net_card, _, _ = get_physical_netcard()
-    #all_net, local_ip = get_net(all_net_card)
-    all_net, local_ip = get_net([interface])
-    run_scan_host(all_net, peer_port)
-    while (not build_all_task) or (scan_done < scan_task):
-        time.sleep(1)
-    add_peer_internal(active_bgp, local_ip, 
-        make_peer_family(['ipv4', 'ipv6', 'l3vpn', 'l2vpn', 'rtc'], graceful_restart=graceful_restart),
-        peer_asn=peer_asn,
-        peer_port=peer_port,
-        graceful_restart=graceful_restart)
+    with bgp_lock:
+        #all_net_card, _, _ = get_physical_netcard()
+        #all_net, local_ip = get_net(all_net_card)
+        all_net, local_ip = get_net([interface])
+        run_scan_host(all_net, peer_port)
+        while (not build_all_task) or (scan_done < scan_task):
+            time.sleep(1)
+        add_peer_internal(active_bgp, local_ip, 
+            make_peer_family(['ipv4', 'ipv6', 'l3vpn', 'l2vpn', 'rtc'], graceful_restart=graceful_restart),
+            peer_asn=peer_asn,
+            peer_port=peer_port,
+            graceful_restart=graceful_restart)
 
 
 def add_peer_byhand(peer_group='',peer_asn=0, peer_addr='', peer_port=179, peer_proto='', reflector_client='', route_server_client='', graceful_restart=0,just_vrf=''):
-    active_bgp.put(peer_addr)
-    _, local_ip = get_net(['tap1'])
-    reflector_client = True if reflector_client.lower() == 'yes' else False
-    route_server_client = True if route_server_client.lower() == 'yes' else False
-    add_peer_internal(active_bgp, local_ip, make_peer_family(peer_proto.split(','), graceful_restart=graceful_restart), 
-        peer_group,
-        peer_asn,
-        peer_port, 
-        route_reflector_client=reflector_client, 
-        route_server_client=route_server_client,
-        graceful_restart=graceful_restart,
-        just_vrf=just_vrf)
+    with bgp_lock:
+        active_bgp.put(peer_addr)
+        _, local_ip = get_net(['tap1'])
+        reflector_client = True if reflector_client.lower() == 'yes' else False
+        route_server_client = True if route_server_client.lower() == 'yes' else False
+        add_peer_internal(active_bgp, local_ip, make_peer_family(peer_proto.split(','), graceful_restart=graceful_restart), 
+            peer_group,
+            peer_asn,
+            peer_port, 
+            route_reflector_client=reflector_client, 
+            route_server_client=route_server_client,
+            graceful_restart=graceful_restart,
+            just_vrf=just_vrf)
 
 
 mval = {}
@@ -310,3 +313,5 @@ def watch_internal(read_history='', callback=False):
 
 
                 print('----------------------------------------')
+            if callback:
+                callback(msg_type='over')

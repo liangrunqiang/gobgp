@@ -17,7 +17,7 @@ start()
 
 stop()
 {
-   ps -ef | grep gobgpd | grep -v grep | cut -c 9-15 | xargs kill -9
+   ps -ef | grep gobgpd | grep -v grep | tr -s ' ' | cut -d' ' -f2 | xargs kill -15
 }
 
 case "$1" in
