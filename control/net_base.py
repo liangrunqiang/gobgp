@@ -172,6 +172,12 @@ def is_same_net(ip1, ip2, mask):
         return 0
 
 
+def is_same_net_with_len(ip1, ip2, ip_len):
+    ip_len = int(ip_len)
+    if ':' not in ip1:
+        ip_len = 32 - ip_len
+        return ((ip2int(ip1) >> ip_len) == (ip2int(ip2) >> ip_len))
+
 
 def get_interface_mac(interface):
     DEVICE_NAME_LEN = 15

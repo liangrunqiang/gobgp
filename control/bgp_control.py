@@ -104,6 +104,15 @@ def del_path(**argv):
     del_path_internal(**argv)
 
 
+def add_del_path(**argv):
+    is_add = argv['is_add']
+    argv.pop('is_add')
+    if is_add:
+        add_path(**argv)
+    else:
+        del_path(**argv)
+
+
 @fun_gen(vrf_name=['','str'], path_type=['','str'])
 def show_path(**argv):
     list_path_internal(**argv)
