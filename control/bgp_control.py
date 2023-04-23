@@ -35,9 +35,10 @@ def fun_gen(**a1):
     def func_deco(func):
         func_arg_require[func.__name__] = a1
         def wrapper(**argv):
-            print('args1:', argv)
+            gen.print_log_info(func.__name__)
+            gen.print_log_info('args1:'+str(argv))
             argv = make_arg_current(a1, argv)
-            print('args2:', argv)
+            gen.print_log_info('args2:'+str(argv))
             try:
                 func(**argv)
             except:
@@ -115,7 +116,7 @@ def add_del_path(**argv):
 
 @fun_gen(vrf_name=['','str'], path_type=['','str'])
 def show_path(**argv):
-    list_path_internal(**argv)
+    return list_path_internal(**argv)
 
 
 @fun_gen(name=['','str'])

@@ -216,6 +216,7 @@ def del_path_internal(bgp_as=1, vrf_name=0, local_pref=0, prefix='', prefix_len=
             )
 
 def list_path_internal(vrf_name='', path_type=''):
+    ret_path = []
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
 
@@ -242,10 +243,15 @@ def list_path_internal(vrf_name='', path_type=''):
                 _TIMEOUT_SECONDS,
             )
         for a in ret:
-            print(a)
+            #print(a)
             if 'evpn' in path_type:
                 r = attribute_pb2.EVPNMACIPAdvertisementRoute()
                 a.destination.paths[0].nlri.Unpack(r)
-                #print(a.destination.prefix, r.labels)
+                nei = a.destination.paths[0].neighbor_ip
+                if not nei or not len(nei) or not ip2int(nei):
+                    nei = 'is_local'
+                ret_path.append((str(a.destination.prefix) + str(r.labels) + nei))
             else:
-                print(a.destination.prefix)
+                ret_path.append(a.destination.prefix)
+        print(ret_path)
+        return ret_path
