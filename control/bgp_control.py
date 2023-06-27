@@ -40,7 +40,7 @@ def fun_gen(**a1):
             argv = make_arg_current(a1, argv)
             gen.print_log_info('args2:'+str(argv))
             try:
-                func(**argv)
+                return func(**argv)
             except:
                 gen.print_log_info(str(traceback.format_exc()))
         return wrapper
