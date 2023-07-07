@@ -215,7 +215,7 @@ def del_path_internal(bgp_as=1, vrf_name=0, local_pref=0, prefix='', prefix_len=
                 _TIMEOUT_SECONDS,
             )
 
-def list_path_internal(vrf_name='', path_type=''):
+def list_path_internal(vrf_name='', path_type='', prefix='', **argv):
     ret_path = []
     with grpc.insecure_channel('localhost:50051') as channel:
         stub = gobgp_pb2_grpc.GobgpApiStub(channel)
@@ -224,24 +224,17 @@ def list_path_internal(vrf_name='', path_type=''):
             family=gobgp_pb2.Family(afi=gobgp_pb2.Family.AFI_L2VPN, safi=gobgp_pb2.Family.SAFI_EVPN)
         else:
             family=gobgp_pb2.Family(afi=gobgp_pb2.Family.AFI_IP, safi=gobgp_pb2.Family.SAFI_UNICAST)
-        if not len(vrf_name):
-            ret = stub.ListPath(
-                gobgp_pb2.ListPathRequest(
-                    table_type=gobgp_pb2.GLOBAL,
-                    family=family,
-                    name="",
-                ),
-                _TIMEOUT_SECONDS,
-            )
-        else:
-            ret = stub.ListPath(
-                gobgp_pb2.ListPathRequest(
-                    table_type=gobgp_pb2.VRF,
-                    family=family,
-                    name=vrf_name,
-                ),
-                _TIMEOUT_SECONDS,
-            )
+        ret = stub.ListPath(
+            gobgp_pb2.ListPathRequest(
+                table_type=gobgp_pb2.VRF if len(vrf_name) else gobgp_pb2.GLOBAL,
+                family=family,
+                name=vrf_name if len(vrf_name) else '',
+                #prefixes=[gobgp_pb2.TableLookupPrefix(prefix=i, type=gobgp_pb2.TableLookupPrefix.Type.SHORTER) for i in prefix.split(',')] \
+                #    if len(prefix) else [],
+                #enable_filtered=1 if len(prefix) else 0
+            ),
+            _TIMEOUT_SECONDS,
+        )
         for a in ret:
             #print(a)
             if 'evpn' in path_type:

@@ -114,9 +114,41 @@ def add_del_path(**argv):
         del_path(**argv)
 
 
-@fun_gen(vrf_name=['','str'], path_type=['','str'])
+@fun_gen(vrf_name=['','str'], path_type=['','str'], prefix=['','str'])
 def show_path(**argv):
     return list_path_internal(**argv)
+
+
+@fun_gen(
+    bgp_as=[0,'int'], 
+    vrf_name=['','str'], 
+    local_pref=[0,'int'],
+    prefix=['','str'], 
+    prefix_len=[0,'int'], 
+    hop=['0.0.0.0','str'],
+    mac=['','str'],
+    vni=['','str'],
+    path_type=['ipv4','str']
+)
+def check_path_exist(**argv):
+    path_info = list_path_internal(**argv)
+    path_type = argv['path_type']
+    if 'vrf' not in vrf_name:
+        vrf_name = 'vrf_' + vrf_name
+    vrf_id = vrf_name.split('_')[1]
+    if path_type == 'evpn-rt2':
+        if '[type:macadv][rd:%s:%s][etag:0][mac:%s][ip:%s][%s]%s' \
+            % (vrf_id, vrf_id, argv['mac'], argv['prefix'], argv['vni'], argv['hop']) not in path_info:
+            return 0
+    if path_type == 'evpn-rt3':
+        if '[type:multicast][rd:%s:%s][etag:%s][ip:%s][]is_local' \
+            % (vrf_id, vrf_id, argv['vni'], argv['prefix']) not in path_info:
+            return 0
+    if path_type == 'evpn-rt5':
+        if '[type:Prefix][rd:%s:%s][etag:0][prefix:%s/%d][]is_local' \
+            % (vrf_id, vrf_id, argv['prefix'], argv['prefix_len']) not in path_info:
+            return 0
+    return 1
 
 
 @fun_gen(name=['','str'])
