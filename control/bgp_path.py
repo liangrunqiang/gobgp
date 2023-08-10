@@ -239,11 +239,17 @@ def list_path_internal(vrf_name='', path_type='', prefix='', **argv):
             #print(a)
             if 'evpn' in path_type:
                 r = attribute_pb2.EVPNMACIPAdvertisementRoute()
+                h = attribute_pb2.MpReachNLRIAttribute()
+                hop = ''
                 a.destination.paths[0].nlri.Unpack(r)
                 nei = a.destination.paths[0].neighbor_ip
                 if not nei or not len(nei) or not ip2int(nei):
                     nei = 'is_local'
-                ret_path.append((str(a.destination.prefix) + str(r.labels) + nei))
+                #print(a.destination.paths[0].pattrs)
+                for p in a.destination.paths[0].pattrs:
+                    if p.Unpack(h):
+                        hop = h.next_hops[0]
+                ret_path.append((str(a.destination.prefix) + str(r.labels) + '[hop:%s]' % hop + nei))
             else:
                 ret_path.append(a.destination.prefix)
         print(ret_path)
